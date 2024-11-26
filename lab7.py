@@ -96,6 +96,61 @@ def inverse_of_jacobian(J):
     return np.linalg.inv(J)
 
 
+# Funkcja do obliczania macierzy lokalnej H
+def compute_local_H(element, k, integration_order):
+    num_nodes = len(element.nodes)  # Liczba węzłów w elemencie (np. 4 dla 4-węzłowego elementu)
+    H = np.zeros((num_nodes, num_nodes))  # Macierz H (4x4 dla elementu 4-węzłowego)
+
+    print(f"Rozmiar macierzy H: {H.shape}")
+
+    # Pobranie punktów i wag Gaussa
+    integration_points, weights = integration_scheme(integration_order)
+
+    for i, (xi, eta) in enumerate(integration_points):
+        weightX = weights[i % len(weights)]  # Dopasowanie wag do punktów
+        weightY = weights[i // len(weights)] # Dopasowanie wag do punktów
+        # Obliczenie Jakobianu
+        J = compute_jacobian(element, xi, eta)
+        detJ = determinant_of_jacobian(J)
+        invJ = inverse_of_jacobian(J)
+
+        # Wyświetlenie Jakobianu
+        print(f"Punkt Gaussa {i+1}: xi={xi}, eta={eta}")
+        print(f"Jakobian:\n{J}\nWyznacznik: {detJ}\nMacierz odwrotna:\n{invJ}")
+
+        # Pochodne funkcji kształtu względem (xi, eta)
+        dN_dxi, dN_deta = element.shape_function_derivatives(xi, eta)
+
+        # Pochodne funkcji kształtu względem (x, y)
+        dN_dx = invJ[0, 0] * dN_dxi + invJ[0, 1] * dN_deta
+        dN_dy = invJ[1, 0] * dN_dxi + invJ[1, 1] * dN_deta
+
+        # Wyświetlenie pochodnych funkcji kształtu
+        print(f"dN{i+1}_dx: {dN_dx}")
+        print(f"dN{i+1}_dy: {dN_dy}")
+
+        # Wyświetlenie pochodnych funkcji kształtu dla każdego węzła
+        for n in range(len(dN_dx)):
+            print(f"dN{n+1}_dx: {dN_dx[n]}")
+            print(f"dN{n+1}_dy: {dN_dy[n]}")
+
+        # Lokalna macierz H w punkcie Gaussa
+        H_local = k * (np.outer(dN_dx, dN_dx) + np.outer(dN_dy, dN_dy)) * detJ * weightX * weightY
+
+        # Rozmiar i zawartość H_local
+        print(f"Rozmiar H_local: {H_local.shape}")
+        print(f"H_local dla punktu {i+1}:\n{H_local}")
+
+        # Dodanie macierzy lokalnej do macierzy globalnej
+        H += H_local
+
+    # Końcowa macierz H
+    print(f"Końcowa macierz H:\n{H}")
+
+    element.H_local = H
+
+    return H
+
 def integration_scheme_2():
     points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
     weights = [1, 1]
