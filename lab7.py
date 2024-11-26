@@ -87,3 +87,72 @@ def read_coordinates_from_file(file_path):
             x, y = map(float, line.split())
             coords.append((x, y))
     return coords
+
+# Funkcje do odczytania wartosci z pliku o strukturze takiej jak w Test1_4_4.txt
+# Odczyt zmiennych z naglowka
+def read_header(file):
+    data = {}
+    for line in file:
+        if line.strip().startswith("*"):
+            break
+        parts = line.split()
+        key = parts[0]
+        value = parts[-1]
+        data[key] = float(value) if "." in value else int(value)
+    return data
+
+def read_nodes(file):
+    nodes = []
+    for line in file:
+        if line.strip().startswith("*"):
+            break
+        _, x, y = map(float, line.split(","))
+        nodes.append((x, y))
+    return nodes
+
+def read_elements(file):
+    elements = []
+    for line in file:
+        if line.strip().startswith("*"):
+            break
+        _, *node_ids = map(int, line.split(","))
+        elements.append(node_ids)
+    return elements
+
+def read_bc(file):
+    bc_nodes = []
+    for line in file:
+        if line.strip().startswith("*"):
+            break
+        bc_nodes.extend(map(int, line.split(",")))
+    return bc_nodes
+
+# Parsowanie calego pliku
+def parse_mesh_file(file_path):
+    with open(file_path, "r") as file:
+        header = read_header(file)
+        node_data = read_nodes(file)
+        element_data = read_elements(file)
+        bc_nodes = set(read_bc(file))
+
+    return {
+        "header": header,
+        "node_data": node_data,
+        "element_data": element_data,
+        "bc_nodes": bc_nodes,
+    }
+
+def create_nodes_and_elements(parsed_data, element_type):
+    # Tworzenie węzłów
+    nodes = [
+        Node(x, y, i + 1 in parsed_data["bc_nodes"])
+        for i, (x, y) in enumerate(parsed_data["node_data"])
+    ]
+
+    # Tworzenie elementów
+    elements = [
+        Element([nodes[i - 1] for i in element], element_type)
+        for element in parsed_data["element_data"]
+    ]
+
+    return nodes, elements
