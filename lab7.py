@@ -75,3 +75,15 @@ class Element:
                 -2 * eta * (1 - xi**2),
                 ])
         return dN_dxi, dN_deta
+
+
+# Odczytywanie wspolrzednych wezlow, struktura pliku:
+# x1 y1
+# x2 y2
+def read_coordinates_from_file(file_path):
+    with open(file_path, 'r') as file:
+        coords = []
+        for line in file:
+            x, y = map(float, line.split())
+            coords.append((x, y))
+    return coords
