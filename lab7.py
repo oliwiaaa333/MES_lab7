@@ -10,11 +10,32 @@ class Node:
 
 
 class Element:
-    def __init__(self, nodes, element_type):
+    def __init__(self, nodes, element_type, integration_order):
         self.nodes = nodes
         self.H_local = None
         self.H_bc = None
         self.element_type = element_type
+        self.edges = self.create_edges(integration_order)
+
+    def create_edges(self, integration_order):
+        if self.element_type == "4-node":
+            return [
+                Edge(self.nodes[0], self.nodes[1], integration_order),
+                Edge(self.nodes[1], self.nodes[2], integration_order),
+                Edge(self.nodes[2], self.nodes[3], integration_order),
+                Edge(self.nodes[3], self.nodes[0], integration_order),
+            ]
+        elif self.element_type == "9-node":
+            return [
+                Edge(self.nodes[0], self.nodes[1], integration_order),
+                Edge(self.nodes[1], self.nodes[5], integration_order),
+                Edge(self.nodes[5], self.nodes[2], integration_order),
+                Edge(self.nodes[2], self.nodes[6], integration_order),
+                Edge(self.nodes[6], self.nodes[3], integration_order),
+                Edge(self.nodes[3], self.nodes[7], integration_order),
+                Edge(self.nodes[7], self.nodes[0], integration_order),
+                Edge(self.nodes[4], self.nodes[8], integration_order),
+            ]
 
     def shape_functions(self, xi, eta):
         if self.element_type == "4-node":
@@ -75,6 +96,22 @@ class Element:
                 -2 * eta * (1 - xi**2),
                 ])
         return dN_dxi, dN_deta
+
+class Edge:
+    def __init__(self, node1, node2, integration_order):
+        self.node1 = node1
+        self.node2 = node2
+        self.integration_order = integration_order
+        self.integration_points = None
+        self.weights = None
+        self.calculate_integration_properties()
+
+    def calculate_integration_properties(self):
+        self.integration_points, self.weights = integration_scheme(self.integration_order)
+
+    def length(self):
+        return np.sqrt((self.node2.x - self.node1.x)**2 + (self.node2.y - self.node1.y)**2)
+
 
 
 def compute_jacobian(element, xi, eta):
