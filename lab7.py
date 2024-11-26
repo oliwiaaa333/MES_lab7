@@ -77,6 +77,18 @@ class Element:
         return dN_dxi, dN_deta
 
 
+def compute_jacobian(element, xi, eta):
+    dN_dxi, dN_deta = element.shape_function_derivatives(xi, eta)
+    J = np.zeros((2, 2))
+    for i, node in enumerate(element.nodes):
+        J[0, 0] += dN_dxi[i] * node.x  # dN/dxi * x_i
+        J[0, 1] += dN_dxi[i] * node.y  # dN/dxi * y_i
+        J[1, 0] += dN_deta[i] * node.x  # dN/deta * x_i
+        J[1, 1] += dN_deta[i] * node.y  # dN/deta * y_i
+    return J
+
+
+
 def integration_scheme_2():
     points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
     weights = [1, 1]
