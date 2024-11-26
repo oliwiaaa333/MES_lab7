@@ -270,3 +270,27 @@ def create_nodes_and_elements(parsed_data, element_type):
     ]
 
     return nodes, elements
+
+if __name__ == "__main__":
+    data = parse_mesh_file("Test1_4_4.txt")
+    nodes, elements = create_nodes_and_elements(data, "4-node")
+
+    num_global_nodes = data["header"]["Nodes"]
+    global_H = np.zeros((num_global_nodes, num_global_nodes))
+    k = data["header"]["Conductivity"]
+    integration_order = 2
+
+    # Iteracja przez elementy
+    for element, element_node_ids in zip(elements, data["element_data"]):
+        # Obliczanie macierzy lokalnej
+        local_H = compute_local_H(element, k, integration_order)
+
+        # Generowanie indeksów globalnych
+        global_indices = [node_id - 1 for node_id in element_node_ids]
+
+        # Agregacja do globalnej macierzy
+        aggregate_to_global_H(global_H, local_H, global_indices)
+
+    # Wyświetlenie globalnej macierzy H
+    print("Macierz globalna H:")
+    print(global_H)
