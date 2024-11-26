@@ -107,7 +107,7 @@ class Edge:
         self.calculate_integration_properties()
 
     def calculate_integration_properties(self):
-        self.integration_points, self.weights = integration_scheme(self.integration_order)
+        self.integration_points, self.weights = integration_scheme_1D(self.integration_order)
 
     def length(self):
         return np.sqrt((self.node2.x - self.node1.x)**2 + (self.node2.y - self.node1.y)**2)
@@ -189,6 +189,36 @@ def compute_local_H(element, k, integration_order):
     return H
 
 
+def compute_Hbc(element, alpha):
+    num_nodes = len(element.nodes)
+    Hbc = np.zeros((num_nodes, num_nodes))
+
+    for edge in element.edges:
+        if not (edge.node1.is_bc and edge.node2.is_bc):
+            continue
+
+        edge_length = edge.length()
+        detJ = edge_length / 2
+
+        for i, xi in enumerate(edge.integration_points):
+            weight = edge.weights[i]
+            N = [(1 - xi) / 2, (1 + xi) / 2]  # Funkcje kształtu dla krawędzi
+
+            # Obliczanie macierzy Hbc dla krawędzi
+            Hbc_edge = alpha * np.outer(N, N) * weight * detJ
+
+            # Indeksy węzłów w macierzy
+            local_indices = [element.nodes.index(edge.node1), element.nodes.index(edge.node2)]
+
+            # Dodanie wyników
+            for a, global_a in enumerate(local_indices):
+                for b, global_b in enumerate(local_indices):
+                    Hbc[global_a, global_b] += Hbc_edge[a, b]
+
+    element.H_bc = Hbc
+    return Hbc
+
+
 # Funkcja do agregacji
 def aggregate_to_global_H(global_H, local_H, global_indices):
     for local_i, global_i in enumerate(global_indices):
@@ -226,6 +256,21 @@ def integration_scheme(order):
         return integration_scheme_4()
     else:
         raise ValueError(f"Nieobsługiwany schemat całkowania: {order}")
+
+
+def integration_scheme_1D(order):
+    if order == 2:
+        points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
+        weights = [1, 1]
+    elif order == 3:
+        points = [-math.sqrt(3 / 5), 0, math.sqrt(3 / 5)]
+        weights = [5 / 9, 8 / 9, 5 / 9]
+    elif order == 4:
+        points = [-0.861136, -0.339981, 0.339981, 0.861136]
+        weights = [0.347855, 0.652145, 0.652145, 0.347855]
+    else:
+        raise ValueError(f"Nieobsługiwany schemat całkowania 1D: {order}")
+    return points, weights
 
 
 # Odczytywanie wspolrzednych wezlow, struktura pliku:
@@ -293,41 +338,49 @@ def parse_mesh_file(file_path):
         "bc_nodes": bc_nodes,
     }
 
-def create_nodes_and_elements(parsed_data, element_type):
-    # Tworzenie węzłów
+def create_nodes_and_elements(parsed_data, element_type, integration_order):
     nodes = [
         Node(x, y, i + 1 in parsed_data["bc_nodes"])
         for i, (x, y) in enumerate(parsed_data["node_data"])
     ]
 
-    # Tworzenie elementów
     elements = [
-        Element([nodes[i - 1] for i in element], element_type)
+        Element([nodes[i - 1] for i in element], element_type, integration_order)
         for element in parsed_data["element_data"]
     ]
 
     return nodes, elements
 
 if __name__ == "__main__":
-    data = parse_mesh_file("Test1_4_4.txt")
-    nodes, elements = create_nodes_and_elements(data, "4-node")
+    # data = parse_mesh_file("Test1_4_4.txt")
+    data = parse_mesh_file("Test2_4_4_MixGrid.txt")
+    integration_order = 2
+    nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
 
+    alpha = data["header"]["Alfa"]
+    k = data["header"]["Conductivity"]
+
+    print("=== Testowanie macierzy Hbc ===")
+    for element in elements:
+        Hbc = compute_Hbc(element, alpha)
+        print(f"Macierz Hbc dla elementu:\n{Hbc}")
+
+    print("\n=== Testowanie macierzy H lokalnych ===")
+    for element in elements:
+        H_local = compute_local_H(element, k, integration_order)
+        print(f"Macierz H lokalna dla elementu:\n{H_local}")
+
+    print("\n=== Testowanie macierzy globalnej ===")
     num_global_nodes = data["header"]["Nodes"]
     global_H = np.zeros((num_global_nodes, num_global_nodes))
-    k = data["header"]["Conductivity"]
-    integration_order = 2
 
-    # Iteracja przez elementy
     for element, element_node_ids in zip(elements, data["element_data"]):
-        # Obliczanie macierzy lokalnej
-        local_H = compute_local_H(element, k, integration_order)
+        H_local = compute_local_H(element, k, integration_order)
+        Hbc = compute_Hbc(element, alpha)
+        H_total = H_local + Hbc
 
-        # Generowanie indeksów globalnych
         global_indices = [node_id - 1 for node_id in element_node_ids]
+        aggregate_to_global_H(global_H, H_total, global_indices)
 
-        # Agregacja do globalnej macierzy
-        aggregate_to_global_H(global_H, local_H, global_indices)
-
-    # Wyświetlenie globalnej macierzy H
-    print("Macierz globalna H:")
+    print("Macierz globalna H (z uwzględnieniem Hbc):")
     print(global_H)
