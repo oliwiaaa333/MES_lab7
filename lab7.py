@@ -88,6 +88,13 @@ def compute_jacobian(element, xi, eta):
     return J
 
 
+def determinant_of_jacobian(J):
+    return np.linalg.det(J)
+
+
+def inverse_of_jacobian(J):
+    return np.linalg.inv(J)
+
 
 def integration_scheme_2():
     points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
