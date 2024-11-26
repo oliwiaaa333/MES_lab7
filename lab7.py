@@ -77,6 +77,38 @@ class Element:
         return dN_dxi, dN_deta
 
 
+def integration_scheme_2():
+    points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
+    weights = [1, 1]
+    xi_eta = [(xi, eta) for xi in points for eta in points]
+    return xi_eta, weights
+
+
+def integration_scheme_3():
+    points = [-math.sqrt(3 / 5), 0, math.sqrt(3 / 5)]
+    weights = [5 / 9, 8 / 9, 5 / 9]
+    xi_eta = [(xi, eta) for xi in points for eta in points]
+    return xi_eta, weights
+
+
+def integration_scheme_4():
+    points = [-0.861136, -0.339981, 0.339981, 0.861136]
+    weights = [0.347855, 0.652145, 0.652145, 0.347855]
+    xi_eta = [(xi, eta) for xi in points for eta in points]
+    return xi_eta, weights
+
+
+def integration_scheme(order):
+    if order == 2:
+        return integration_scheme_2()
+    elif order == 3:
+        return integration_scheme_3()
+    elif order == 4:
+        return integration_scheme_4()
+    else:
+        raise ValueError(f"Nieobsługiwany schemat całkowania: {order}")
+
+
 # Odczytywanie wspolrzednych wezlow, struktura pliku:
 # x1 y1
 # x2 y2
