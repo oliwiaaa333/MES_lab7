@@ -151,6 +151,14 @@ def compute_local_H(element, k, integration_order):
 
     return H
 
+
+# Funkcja do agregacji
+def aggregate_to_global_H(global_H, local_H, global_indices):
+    for local_i, global_i in enumerate(global_indices):
+        for local_j, global_j in enumerate(global_indices):
+            global_H[global_i,global_j] += local_H[local_i,local_j]
+
+
 def integration_scheme_2():
     points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
     weights = [1, 1]
