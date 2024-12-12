@@ -14,6 +14,7 @@ class Element:
         self.nodes = nodes
         self.H_local = None
         self.H_bc = None
+        self.P_local = None
         self.element_type = element_type
         self.edges = self.create_edges(integration_order)
 
@@ -135,10 +136,10 @@ def inverse_of_jacobian(J):
 
 # Funkcja do obliczania macierzy lokalnej H
 def compute_local_H(element, k, integration_order):
-    num_nodes = len(element.nodes)  # Liczba węzłów w elemencie (np. 4 dla 4-węzłowego elementu)
-    H = np.zeros((num_nodes, num_nodes))  # Macierz H (4x4 dla elementu 4-węzłowego)
+    num_nodes = len(element.nodes)
+    H = np.zeros((num_nodes, num_nodes))
 
-    print(f"Rozmiar macierzy H: {H.shape}")
+    # print(f"Rozmiar macierzy H: {H.shape}")
 
     # Pobranie punktów i wag Gaussa
     integration_points, weights = integration_scheme(integration_order)
@@ -151,9 +152,9 @@ def compute_local_H(element, k, integration_order):
         detJ = determinant_of_jacobian(J)
         invJ = inverse_of_jacobian(J)
 
-        # Wyświetlenie Jakobianu
-        print(f"Punkt Gaussa {i+1}: xi={xi}, eta={eta}")
-        print(f"Jakobian:\n{J}\nWyznacznik: {detJ}\nMacierz odwrotna:\n{invJ}")
+        # # Wyświetlenie Jakobianu
+        # print(f"Punkt Gaussa {i+1}: xi={xi}, eta={eta}")
+        # print(f"Jakobian:\n{J}\nWyznacznik: {detJ}\nMacierz odwrotna:\n{invJ}")
 
         # Pochodne funkcji kształtu względem (xi, eta)
         dN_dxi, dN_deta = element.shape_function_derivatives(xi, eta)
@@ -162,27 +163,27 @@ def compute_local_H(element, k, integration_order):
         dN_dx = invJ[0, 0] * dN_dxi + invJ[0, 1] * dN_deta
         dN_dy = invJ[1, 0] * dN_dxi + invJ[1, 1] * dN_deta
 
-        # Wyświetlenie pochodnych funkcji kształtu
-        print(f"dN{i+1}_dx: {dN_dx}")
-        print(f"dN{i+1}_dy: {dN_dy}")
-
-        # Wyświetlenie pochodnych funkcji kształtu dla każdego węzła
-        for n in range(len(dN_dx)):
-            print(f"dN{n+1}_dx: {dN_dx[n]}")
-            print(f"dN{n+1}_dy: {dN_dy[n]}")
+        # # Wyświetlenie pochodnych funkcji kształtu
+        # print(f"dN{i+1}_dx: {dN_dx}")
+        # print(f"dN{i+1}_dy: {dN_dy}")
+        #
+        # # Wyświetlenie pochodnych funkcji kształtu dla każdego węzła
+        # for n in range(len(dN_dx)):
+        #     print(f"dN{n+1}_dx: {dN_dx[n]}")
+        #     print(f"dN{n+1}_dy: {dN_dy[n]}")
 
         # Lokalna macierz H w punkcie Gaussa
         H_local = k * (np.outer(dN_dx, dN_dx) + np.outer(dN_dy, dN_dy)) * detJ * weightX * weightY
 
-        # Rozmiar i zawartość H_local
-        print(f"Rozmiar H_local: {H_local.shape}")
-        print(f"H_local dla punktu {i+1}:\n{H_local}")
+        # # Rozmiar i zawartość H_local
+        # print(f"Rozmiar H_local: {H_local.shape}")
+        # print(f"H_local dla punktu {i+1}:\n{H_local}")
 
         # Dodanie macierzy lokalnej do macierzy globalnej
         H += H_local
 
-    # Końcowa macierz H
-    print(f"Końcowa macierz H:\n{H}")
+    # # Końcowa macierz H
+    # print(f"Końcowa macierz H:\n{H}")
 
     element.H_local = H
 
@@ -218,12 +219,45 @@ def compute_Hbc(element, alpha):
     element.H_bc = Hbc
     return Hbc
 
+# Funkcja do obliczania wektora P
+def compute_local_P(element, alpha, t_env):
+    num_nodes = len(element.nodes)
+    P = np.zeros(num_nodes)
+
+    for edge in element.edges:
+        if not (edge.node1.is_bc and edge.node2.is_bc):
+            continue
+
+        edge_length = edge.length()
+        detJ = edge_length / 2
+
+        for i, xi in enumerate(edge.integration_points):
+            weight = edge.weights[i]
+            N = [(1 - xi) / 2, (1 + xi) / 2]  # Shape functions for the edge
+
+            # Compute the contribution to P for the edge
+            P_edge = alpha * t_env * np.array(N) * weight * detJ
+
+            # Indices in the global system
+            local_indices = [element.nodes.index(edge.node1), element.nodes.index(edge.node2)]
+
+            # Add contributions to the local P vector
+            for a, global_a in enumerate(local_indices):
+                P[global_a] += P_edge[a]
+
+    element.P = P
+    return P
 
 # Funkcja do agregacji
 def aggregate_to_global_H(global_H, local_H, global_indices):
     for local_i, global_i in enumerate(global_indices):
         for local_j, global_j in enumerate(global_indices):
             global_H[global_i,global_j] += local_H[local_i,local_j]
+
+# Funkcja do agregacji wektora P
+def aggregate_to_global_P(global_P, local_P, global_indices):
+    for local_i, global_i in enumerate(global_indices):
+        global_P[global_i] += local_P[local_i]
 
 
 def integration_scheme_2():
@@ -257,7 +291,7 @@ def integration_scheme(order):
     else:
         raise ValueError(f"Nieobsługiwany schemat całkowania: {order}")
 
-
+# potrzebne do krawedzi
 def integration_scheme_1D(order):
     if order == 2:
         points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
@@ -351,24 +385,75 @@ def create_nodes_and_elements(parsed_data, element_type, integration_order):
 
     return nodes, elements
 
+# if __name__ == "__main__":
+#     # data = parse_mesh_file("Test1_4_4.txt")
+#     data = parse_mesh_file("Test2_4_4_MixGrid.txt")
+#     integration_order = 2
+#     nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
+#
+#     alpha = data["header"]["Alfa"]
+#     k = data["header"]["Conductivity"]
+#
+#     print("=== Testowanie macierzy Hbc ===")
+#     for element in elements:
+#         Hbc = compute_Hbc(element, alpha)
+#         print(f"Macierz Hbc dla elementu:\n{Hbc}")
+#
+#     print("\n=== Testowanie macierzy H lokalnych ===")
+#     for element in elements:
+#         H_local = compute_local_H(element, k, integration_order)
+#         print(f"Macierz H lokalna dla elementu:\n{H_local}")
+#
+#     print("\n=== Testowanie macierzy globalnej ===")
+#     num_global_nodes = data["header"]["Nodes"]
+#     global_H = np.zeros((num_global_nodes, num_global_nodes))
+#
+#     for element, element_node_ids in zip(elements, data["element_data"]):
+#         H_local = compute_local_H(element, k, integration_order)
+#         Hbc = compute_Hbc(element, alpha)
+#         H_total = H_local + Hbc
+#
+#         global_indices = [node_id - 1 for node_id in element_node_ids]
+#         aggregate_to_global_H(global_H, H_total, global_indices)
+#
+#     print("Macierz globalna H (z uwzględnieniem Hbc):")
+#     print(global_H)
 if __name__ == "__main__":
-    # data = parse_mesh_file("Test1_4_4.txt")
     data = parse_mesh_file("Test2_4_4_MixGrid.txt")
+    # data = parse_mesh_file("Test1_4_4.txt")
+    # data = parse_mesh_file("H_test.txt")
     integration_order = 2
     nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
 
     alpha = data["header"]["Alfa"]
     k = data["header"]["Conductivity"]
+    Tot = data["header"]["Tot"]
 
-    print("=== Testowanie macierzy Hbc ===")
-    for element in elements:
-        Hbc = compute_Hbc(element, alpha)
-        print(f"Macierz Hbc dla elementu:\n{Hbc}")
+    global_P = np.zeros(len(nodes))
 
-    print("\n=== Testowanie macierzy H lokalnych ===")
-    for element in elements:
+    # print("\n=== Macierze H lokalne ===")
+    # for idx, element in enumerate(elements, start=1):
+    #     H_local = compute_local_H(element, k, integration_order)
+    #     print(f"H dla elementu - {idx}")
+    #     for row in H_local:
+    #         print(" ".join(f"{value:.5f}" for value in row))
+
+    print("\n=== Macierze H całkowite (H_total) ===")
+    for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
         H_local = compute_local_H(element, k, integration_order)
-        print(f"Macierz H lokalna dla elementu:\n{H_local}")
+        Hbc = compute_Hbc(element, alpha)
+        H_total = H_local + Hbc
+
+
+        P_local = compute_local_P(element, alpha, Tot)
+        element.P_local = P_local
+
+        print(f"H całkowita (H_total) dla elementu - {idx}")
+        for row in H_total:
+            print(" ".join(f"{value:.5f}" for value in row))
+
+        print("Wektor P lokalny:")
+        print(" ".join(f"{value:.1f}" for value in P_local))
 
     print("\n=== Testowanie macierzy globalnej ===")
     num_global_nodes = data["header"]["Nodes"]
@@ -378,9 +463,19 @@ if __name__ == "__main__":
         H_local = compute_local_H(element, k, integration_order)
         Hbc = compute_Hbc(element, alpha)
         H_total = H_local + Hbc
+        P_local = compute_local_P(element, alpha, Tot)
+        element.P_local = P_local
 
         global_indices = [node_id - 1 for node_id in element_node_ids]
+        aggregate_to_global_P(global_P, P_local, global_indices)
         aggregate_to_global_H(global_H, H_total, global_indices)
 
-    print("Macierz globalna H (z uwzględnieniem Hbc):")
-    print(global_H)
+
+    # Wyświetlenie ostatecznej macierzy globalnej H
+    print("Macierz globalna H:")
+    for row in global_H:
+        print(" ".join(f"{value:.5f}" for value in row))
+
+    # Wyświetlenie wektora globalnego P
+    print("Globalny wektor P:")
+    print(" ".join(f"{value:.1f}" for value in global_P))
