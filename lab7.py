@@ -385,6 +385,32 @@ def create_nodes_and_elements(parsed_data, element_type, integration_order):
 
     return nodes, elements
 
+def solve_gauss(H, P):
+    n = len(P)
+    A = H.copy()
+    b = -P.copy()
+
+    # Eliminacja Gaussa
+    for i in range(n):
+        # Szukanie największego elementu do pivotingu
+        max_row = i + np.argmax(np.abs(A[i:, i]))
+        A[[i, max_row]] = A[[max_row, i]]
+        b[[i, max_row]] = b[[max_row, i]]
+
+        # Eliminacja wierszy poniżej
+        for j in range(i + 1, n):
+            factor = A[j, i] / A[i, i]
+            A[j, i:] -= factor * A[i, i:]
+            b[j] -= factor * b[i]
+
+    # Rozwiązanie układu przez podstawienie wsteczne
+    t = np.zeros(n)
+    for i in range(n - 1, -1, -1):
+        t[i] = (b[i] - np.dot(A[i, i + 1:], t[i + 1:])) / A[i, i]
+
+    return t
+
+
 # if __name__ == "__main__":
 #     # data = parse_mesh_file("Test1_4_4.txt")
 #     data = parse_mesh_file("Test2_4_4_MixGrid.txt")
@@ -479,3 +505,11 @@ if __name__ == "__main__":
     # Wyświetlenie wektora globalnego P
     print("Globalny wektor P:")
     print(" ".join(f"{value:.1f}" for value in global_P))
+
+    # Rozwiązanie układu równań
+    temperatures = solve_gauss(global_H, global_P)
+
+    # Wyświetlenie wyników
+    print("\n=== Wektor temperatur w węzłach (t) ===")
+    for i, temp in enumerate(temperatures):
+        print(f"Węzeł {i+1}: {temp:.2f} °C")
