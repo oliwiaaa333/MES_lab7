@@ -452,7 +452,8 @@ def gauss_rozwiazanie(H, P):
 
 if __name__ == "__main__":
     # data = parse_mesh_file("Test2_4_4_MixGrid.txt")
-    data = parse_mesh_file("Test1_4_4.txt")
+    # data = parse_mesh_file("Test1_4_4.txt")
+    data = parse_mesh_file("Test3_31_31_kwadrat.txt")
 
     integration_order = 2
     nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
@@ -462,8 +463,15 @@ if __name__ == "__main__":
     Tot = data["header"]["Tot"]
     density = data["header"]["Density"]
     specific_heat = data["header"]["SpecificHeat"]
+    initial_temp = data["header"]["InitialTemp"]
+    simulation_time = data["header"]["SimulationTime"]
+    simulation_step = data["header"]["SimulationStepTime"]
 
-    global_P = np.zeros(len(nodes))
+    num_global_nodes = data["header"]["Nodes"]
+
+    global_H = np.zeros((num_global_nodes, num_global_nodes))
+    global_P = np.zeros(num_global_nodes)
+    global_C = np.zeros((num_global_nodes, num_global_nodes))
 
     # print("\n=== Macierze H lokalne ===")
     # for idx, element in enumerate(elements, start=1):
@@ -472,72 +480,110 @@ if __name__ == "__main__":
     #     for row in H_local:
     #         print(" ".join(f"{value:.5f}" for value in row))
 
-    print("\n=== Macierze H całkowite (H_total) ===")
-    for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
-        H_local = compute_local_H(element, k, integration_order)
-        Hbc = compute_Hbc(element, alpha)
-        H_total = H_local + Hbc
+    # printowanie do procesu stacjonarnego, zostawiam na razie dla wygody
+    # print("\n=== Macierze H całkowite (H_total) ===")
+    # for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
+    #     H_local = compute_local_H(element, k, integration_order)
+    #     Hbc = compute_Hbc(element, alpha)
+    #     H_total = H_local + Hbc
+    #
+    #     P_local = compute_local_P(element, alpha, Tot)
+    #     element.P_local = P_local
+    #
+    #     print(f"H całkowita (H_total) dla elementu - {idx}")
+    #     for row in H_total:
+    #         print(" ".join(f"{value:.5f}" for value in row))
+    #
+    #     print("Wektor P lokalny:")
+    #     print(" ".join(f"{value:.1f}" for value in P_local))
+    #
+    # print("\n=== Testowanie macierzy globalnej ===")
+    # for element, element_node_ids in zip(elements, data["element_data"]):
+    #     H_local = compute_local_H(element, k, integration_order)
+    #     Hbc = compute_Hbc(element, alpha)
+    #     H_total = H_local + Hbc
+    #     P_local = compute_local_P(element, alpha, Tot)
+    #     element.P_local = P_local
+    #
+    #     global_indices = [node_id - 1 for node_id in element_node_ids]
+    #     aggregate_to_global_P(global_P, P_local, global_indices)
+    #     aggregate_to_global_H(global_H, H_total, global_indices)
+    #
+    #
+    # # Wyświetlenie ostatecznej macierzy globalnej H
+    # print("Macierz globalna H:")
+    # for row in global_H:
+    #     print(" ".join(f"{value:.5f}" for value in row))
+    #
+    # # Wyświetlenie wektora globalnego P
+    # print("Globalny wektor P:")
+    # print(" ".join(f"{value:.1f}" for value in global_P))
+    #
+    # # Rozwiązanie układu równań
+    # # temperatures = np.linalg.solve(global_H, -global_P)
+    # temperaturesSecondOne = gauss_rozwiazanie(global_H, global_P)
+    #
+    # # Wyświetlenie wyników
+    # print("\n=== Wektor temperatur w węzłach (t) w procesie stacjonarnym ===")
+    # for i, temp in enumerate(temperaturesSecondOne):
+    #     print(f"Węzeł {i+1}: {temp:.2f} °C")
+    #
+    #
+    #
+    # # Obliczanie macierzy C lokalnych
+    # print("\n=== Macierze C lokalne ===")
+    # for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
+    #     C_local = compute_local_C(element, density, specific_heat, integration_order)
+    #     print(f"Macierz C lokalna dla elementu - {idx}")
+    #     for row in C_local:
+    #         print(" ".join(f"{value:.5f}" for value in row))
+    #
+    #     # Agregacja macierzy C do globalnej
+    #     global_indices = [node_id - 1 for node_id in element_node_ids]
+    #     aggregate_to_global_C(global_C, C_local, global_indices)
+    #
+    # # Wyświetlenie macierzy globalnej C
+    # print("\n=== Macierz globalna C ===")
+    # for row in global_C:
+    #     print(" ".join(f"{value:.5f}" for value in row))
 
-
-        P_local = compute_local_P(element, alpha, Tot)
-        element.P_local = P_local
-
-        print(f"H całkowita (H_total) dla elementu - {idx}")
-        for row in H_total:
-            print(" ".join(f"{value:.5f}" for value in row))
-
-        print("Wektor P lokalny:")
-        print(" ".join(f"{value:.1f}" for value in P_local))
-
-    print("\n=== Testowanie macierzy globalnej ===")
-    num_global_nodes = data["header"]["Nodes"]
-    global_H = np.zeros((num_global_nodes, num_global_nodes))
-
+    # test niestacjonarny
     for element, element_node_ids in zip(elements, data["element_data"]):
         H_local = compute_local_H(element, k, integration_order)
+        C_local = compute_local_C(element, density, specific_heat, integration_order)
         Hbc = compute_Hbc(element, alpha)
         H_total = H_local + Hbc
+
         P_local = compute_local_P(element, alpha, Tot)
-        element.P_local = P_local
 
         global_indices = [node_id - 1 for node_id in element_node_ids]
-        aggregate_to_global_P(global_P, P_local, global_indices)
         aggregate_to_global_H(global_H, H_total, global_indices)
-
-
-    # Wyświetlenie ostatecznej macierzy globalnej H
-    print("Macierz globalna H:")
-    for row in global_H:
-        print(" ".join(f"{value:.5f}" for value in row))
-
-    # Wyświetlenie wektora globalnego P
-    print("Globalny wektor P:")
-    print(" ".join(f"{value:.1f}" for value in global_P))
-
-    # Rozwiązanie układu równań
-    # temperatures = np.linalg.solve(global_H, -global_P)
-    temperaturesSecondOne = gauss_rozwiazanie(global_H, global_P)
-
-    # Wyświetlenie wyników
-    print("\n=== Wektor temperatur w węzłach (t) w procesie stacjonarnym ===")
-    for i, temp in enumerate(temperaturesSecondOne):
-        print(f"Węzeł {i+1}: {temp:.2f} °C")
-
-    global_C = np.zeros((num_global_nodes, num_global_nodes))
-
-    # Obliczanie macierzy C lokalnych
-    print("\n=== Macierze C lokalne ===")
-    for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
-        C_local = compute_local_C(element, density, specific_heat, integration_order)
-        print(f"Macierz C lokalna dla elementu - {idx}")
-        for row in C_local:
-            print(" ".join(f"{value:.5f}" for value in row))
-
-        # Agregacja macierzy C do globalnej
-        global_indices = [node_id - 1 for node_id in element_node_ids]
         aggregate_to_global_C(global_C, C_local, global_indices)
+        aggregate_to_global_P(global_P, P_local, global_indices)
 
-    # Wyświetlenie macierzy globalnej C
-    print("\n=== Macierz globalna C ===")
-    for row in global_C:
-        print(" ".join(f"{value:.5f}" for value in row))
+    # Wektor początkowy temperatur
+    t_current = np.full(num_global_nodes, initial_temp)
+
+    # Symulacja w czasie
+    for step in range(1, int(simulation_time / simulation_step) + 1):
+        # Obliczenie macierzy zastępczej H'
+        H_prime = global_H + global_C / simulation_step
+
+        # Obliczenie wektora P'
+        P_prime = (global_C / simulation_step) @ t_current + global_P
+
+        # Rozwiązanie układu równań dla t1
+        t_next = gauss_rozwiazanie(H_prime, P_prime)
+
+        t_min = np.min(t_next)
+        t_max = np.max(t_next)
+
+        # Wyświetlenie wyników dla danego kroku czasowego
+        print(f"\n=== Krok czasowy {step}: t = {step * simulation_step}s ===")
+        # for i, temp in enumerate(t_next):
+        #     print(f"Węzeł {i + 1}: {temp:.2f} °C")
+        print(f"Temperatura minimalna: {t_min:.2f} °C")
+        print(f"Temperatura maksymalna: {t_max:.2f} °C")
+
+        # Aktualizacja temperatur
+        t_current = t_next
