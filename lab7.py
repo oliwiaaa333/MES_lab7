@@ -15,6 +15,7 @@ class Element:
         self.H_local = None
         self.H_bc = None
         self.P_local = None
+        self.C_local = None
         self.element_type = element_type
         self.edges = self.create_edges(integration_order)
 
@@ -248,6 +249,35 @@ def compute_local_P(element, alpha, t_env):
     element.P = P
     return P
 
+# funkcja do obliczania macierzy pojemności cieplnej C
+def compute_local_C(element, density, specific_heat, integration_order):
+    num_nodes = len(element.nodes)
+    C = np.zeros((num_nodes, num_nodes))
+
+    # Pobranie punktów i wag Gaussa
+    integration_points, weights = integration_scheme(integration_order)
+
+    for i, (xi, eta) in enumerate(integration_points):
+        weightX = weights[i % len(weights)]
+        weightY = weights[i // len(weights)]
+
+        # Obliczenie Jakobianu
+        J = compute_jacobian(element, xi, eta)
+        detJ = determinant_of_jacobian(J)
+
+        # Funkcje kształtu
+        N = element.shape_functions(xi, eta)
+
+        # Obliczenie lokalnej macierzy pojemności cieplnej
+        C_local = density * specific_heat * np.outer(N, N) * detJ * weightX * weightY
+
+        # Dodanie macierzy lokalnej do globalnej macierzy elementu
+        C += C_local
+
+    element.C_local = C
+    return C
+
+
 # Funkcja do agregacji
 def aggregate_to_global_H(global_H, local_H, global_indices):
     for local_i, global_i in enumerate(global_indices):
@@ -258,6 +288,12 @@ def aggregate_to_global_H(global_H, local_H, global_indices):
 def aggregate_to_global_P(global_P, local_P, global_indices):
     for local_i, global_i in enumerate(global_indices):
         global_P[global_i] += local_P[local_i]
+
+# Funkcja do agregacji macierzy C
+def aggregate_to_global_C(global_C, local_C, global_indices):
+    for local_i, global_i in enumerate(global_indices):
+        for local_j, global_j in enumerate(global_indices):
+            global_C[global_i, global_j] += local_C[local_i, local_j]
 
 
 def integration_scheme_2():
@@ -385,32 +421,6 @@ def create_nodes_and_elements(parsed_data, element_type, integration_order):
 
     return nodes, elements
 
-def solve_gauss(H, P):
-    n = len(P)
-    A = H.copy()
-    b = P.copy()
-    t = np.zeros(n)
-
-    # eliminacja Gaussa
-    for i in range(n):
-        # szukam największego elementu do pivotingu
-        max_row = i + np.argmax(np.abs(A[i:, i]))
-        if i != max_row:
-            A[[i, max_row]] = A[[max_row, i]]
-            b[[i, max_row]] = b[[max_row, i]]
-
-        # eliminacja wierszy poniżej
-        for j in range(i + 1, n):
-            factor = A[j, i] / A[i, i]
-            A[j, i:] -= factor * A[i, i:]
-            b[j] -= factor * b[i]
-
-    # rozwiązanie układu przez podstawienie wsteczne
-    for i in range(n - 1, -1, -1):
-        t[i] = (b[i] - np.dot(A[i, i + 1:], t[i + 1:])) / A[i, i]
-
-    return t
-
 # sprawdzam inną wersję gaussa - wziętą z metod numerycznych
 # gdzie logika tej funkcji polegała na łączeniu ze sobą macierzy z wektorem w macierz rozszerzoną
 def gauss_rozwiazanie(H, P):
@@ -440,50 +450,18 @@ def gauss_rozwiazanie(H, P):
 
     return rozwiazanie
 
-
-# if __name__ == "__main__":
-#     # data = parse_mesh_file("Test1_4_4.txt")
-#     data = parse_mesh_file("Test2_4_4_MixGrid.txt")
-#     integration_order = 2
-#     nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
-#
-#     alpha = data["header"]["Alfa"]
-#     k = data["header"]["Conductivity"]
-#
-#     print("=== Testowanie macierzy Hbc ===")
-#     for element in elements:
-#         Hbc = compute_Hbc(element, alpha)
-#         print(f"Macierz Hbc dla elementu:\n{Hbc}")
-#
-#     print("\n=== Testowanie macierzy H lokalnych ===")
-#     for element in elements:
-#         H_local = compute_local_H(element, k, integration_order)
-#         print(f"Macierz H lokalna dla elementu:\n{H_local}")
-#
-#     print("\n=== Testowanie macierzy globalnej ===")
-#     num_global_nodes = data["header"]["Nodes"]
-#     global_H = np.zeros((num_global_nodes, num_global_nodes))
-#
-#     for element, element_node_ids in zip(elements, data["element_data"]):
-#         H_local = compute_local_H(element, k, integration_order)
-#         Hbc = compute_Hbc(element, alpha)
-#         H_total = H_local + Hbc
-#
-#         global_indices = [node_id - 1 for node_id in element_node_ids]
-#         aggregate_to_global_H(global_H, H_total, global_indices)
-#
-#     print("Macierz globalna H (z uwzględnieniem Hbc):")
-#     print(global_H)
 if __name__ == "__main__":
-    data = parse_mesh_file("Test2_4_4_MixGrid.txt")
-    # data = parse_mesh_file("Test1_4_4.txt")
-    # data = parse_mesh_file("H_test.txt")
+    # data = parse_mesh_file("Test2_4_4_MixGrid.txt")
+    data = parse_mesh_file("Test1_4_4.txt")
+
     integration_order = 2
     nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
 
     alpha = data["header"]["Alfa"]
     k = data["header"]["Conductivity"]
     Tot = data["header"]["Tot"]
+    density = data["header"]["Density"]
+    specific_heat = data["header"]["SpecificHeat"]
 
     global_P = np.zeros(len(nodes))
 
@@ -537,16 +515,29 @@ if __name__ == "__main__":
     print(" ".join(f"{value:.1f}" for value in global_P))
 
     # Rozwiązanie układu równań
-    temperatures = solve_gauss(global_H, global_P)
     # temperatures = np.linalg.solve(global_H, -global_P)
     temperaturesSecondOne = gauss_rozwiazanie(global_H, global_P)
 
     # Wyświetlenie wyników
-    print("\n=== Wektor temperatur w węzłach (t) ===")
-    for i, temp in enumerate(temperatures):
-        print(f"Węzeł {i+1}: {temp:.2f} °C")
-
-    # Wyświetlenie wyników - inna implemetacja
-    print("\n=== Wektor temperatur w węzłach (t) ===")
+    print("\n=== Wektor temperatur w węzłach (t) w procesie stacjonarnym ===")
     for i, temp in enumerate(temperaturesSecondOne):
         print(f"Węzeł {i+1}: {temp:.2f} °C")
+
+    global_C = np.zeros((num_global_nodes, num_global_nodes))
+
+    # Obliczanie macierzy C lokalnych
+    print("\n=== Macierze C lokalne ===")
+    for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
+        C_local = compute_local_C(element, density, specific_heat, integration_order)
+        print(f"Macierz C lokalna dla elementu - {idx}")
+        for row in C_local:
+            print(" ".join(f"{value:.5f}" for value in row))
+
+        # Agregacja macierzy C do globalnej
+        global_indices = [node_id - 1 for node_id in element_node_ids]
+        aggregate_to_global_C(global_C, C_local, global_indices)
+
+    # Wyświetlenie macierzy globalnej C
+    print("\n=== Macierz globalna C ===")
+    for row in global_C:
+        print(" ".join(f"{value:.5f}" for value in row))
