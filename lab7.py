@@ -388,27 +388,57 @@ def create_nodes_and_elements(parsed_data, element_type, integration_order):
 def solve_gauss(H, P):
     n = len(P)
     A = H.copy()
-    b = -P.copy()
+    b = P.copy()
+    t = np.zeros(n)
 
-    # Eliminacja Gaussa
+    # eliminacja Gaussa
     for i in range(n):
-        # Szukanie największego elementu do pivotingu
+        # szukam największego elementu do pivotingu
         max_row = i + np.argmax(np.abs(A[i:, i]))
-        A[[i, max_row]] = A[[max_row, i]]
-        b[[i, max_row]] = b[[max_row, i]]
+        if i != max_row:
+            A[[i, max_row]] = A[[max_row, i]]
+            b[[i, max_row]] = b[[max_row, i]]
 
-        # Eliminacja wierszy poniżej
+        # eliminacja wierszy poniżej
         for j in range(i + 1, n):
             factor = A[j, i] / A[i, i]
             A[j, i:] -= factor * A[i, i:]
             b[j] -= factor * b[i]
 
-    # Rozwiązanie układu przez podstawienie wsteczne
-    t = np.zeros(n)
+    # rozwiązanie układu przez podstawienie wsteczne
     for i in range(n - 1, -1, -1):
         t[i] = (b[i] - np.dot(A[i, i + 1:], t[i + 1:])) / A[i, i]
 
     return t
+
+# sprawdzam inną wersję gaussa - wziętą z metod numerycznych
+# gdzie logika tej funkcji polegała na łączeniu ze sobą macierzy z wektorem w macierz rozszerzoną
+def gauss_rozwiazanie(H, P):
+    H = np.array(H, dtype=float)  # Upewniamy się, że H jest tablicą NumPy
+    P = np.array(P, dtype=float)  # Upewniamy się, że P jest tablicą NumPy
+    n = len(H)
+
+    # Łączenie macierzy H i wektora P w macierz rozszerzoną
+    macierz = np.hstack((H, P.reshape(-1, 1)))
+
+    # Eliminacja Gaussa
+    for k in range(n - 1):
+        if abs(macierz[k, k]) < 1e-10:
+            raise ValueError("Znaleziono zero na przekątnej macierzy!")
+
+        for i in range(k + 1, n):
+            mnoznik = macierz[i, k] / macierz[k, k]
+            macierz[i, k:] -= mnoznik * macierz[k, k:]
+
+    # Postępowanie odwrotne
+    rozwiazanie = np.zeros(n)
+    rozwiazanie[-1] = macierz[-1, -1] / macierz[-1, -2]
+
+    for i in range(n - 2, -1, -1):
+        suma = np.dot(macierz[i, i + 1:n], rozwiazanie[i + 1:])
+        rozwiazanie[i] = (macierz[i, -1] - suma) / macierz[i, i]
+
+    return rozwiazanie
 
 
 # if __name__ == "__main__":
@@ -508,8 +538,15 @@ if __name__ == "__main__":
 
     # Rozwiązanie układu równań
     temperatures = solve_gauss(global_H, global_P)
+    # temperatures = np.linalg.solve(global_H, -global_P)
+    temperaturesSecondOne = gauss_rozwiazanie(global_H, global_P)
 
     # Wyświetlenie wyników
     print("\n=== Wektor temperatur w węzłach (t) ===")
     for i, temp in enumerate(temperatures):
+        print(f"Węzeł {i+1}: {temp:.2f} °C")
+
+    # Wyświetlenie wyników - inna implemetacja
+    print("\n=== Wektor temperatur w węzłach (t) ===")
+    for i, temp in enumerate(temperaturesSecondOne):
         print(f"Węzeł {i+1}: {temp:.2f} °C")
