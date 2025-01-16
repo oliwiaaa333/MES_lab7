@@ -135,27 +135,19 @@ def inverse_of_jacobian(J):
     return np.linalg.inv(J)
 
 
-# Funkcja do obliczania macierzy lokalnej H
 def compute_local_H(element, k, integration_order):
     num_nodes = len(element.nodes)
     H = np.zeros((num_nodes, num_nodes))
 
-    # print(f"Rozmiar macierzy H: {H.shape}")
-
-    # Pobranie punktów i wag Gaussa
     integration_points, weights = integration_scheme(integration_order)
 
     for i, (xi, eta) in enumerate(integration_points):
-        weightX = weights[i % len(weights)]  # Dopasowanie wag do punktów
-        weightY = weights[i // len(weights)] # Dopasowanie wag do punktów
-        # Obliczenie Jakobianu
+        weightX = weights[i % len(weights)]
+        weightY = weights[i // len(weights)]
+
         J = compute_jacobian(element, xi, eta)
         detJ = determinant_of_jacobian(J)
         invJ = inverse_of_jacobian(J)
-
-        # # Wyświetlenie Jakobianu
-        # print(f"Punkt Gaussa {i+1}: xi={xi}, eta={eta}")
-        # print(f"Jakobian:\n{J}\nWyznacznik: {detJ}\nMacierz odwrotna:\n{invJ}")
 
         # Pochodne funkcji kształtu względem (xi, eta)
         dN_dxi, dN_deta = element.shape_function_derivatives(xi, eta)
@@ -164,27 +156,10 @@ def compute_local_H(element, k, integration_order):
         dN_dx = invJ[0, 0] * dN_dxi + invJ[0, 1] * dN_deta
         dN_dy = invJ[1, 0] * dN_dxi + invJ[1, 1] * dN_deta
 
-        # # Wyświetlenie pochodnych funkcji kształtu
-        # print(f"dN{i+1}_dx: {dN_dx}")
-        # print(f"dN{i+1}_dy: {dN_dy}")
-        #
-        # # Wyświetlenie pochodnych funkcji kształtu dla każdego węzła
-        # for n in range(len(dN_dx)):
-        #     print(f"dN{n+1}_dx: {dN_dx[n]}")
-        #     print(f"dN{n+1}_dy: {dN_dy[n]}")
-
         # Lokalna macierz H w punkcie Gaussa
         H_local = k * (np.outer(dN_dx, dN_dx) + np.outer(dN_dy, dN_dy)) * detJ * weightX * weightY
 
-        # # Rozmiar i zawartość H_local
-        # print(f"Rozmiar H_local: {H_local.shape}")
-        # print(f"H_local dla punktu {i+1}:\n{H_local}")
-
-        # Dodanie macierzy lokalnej do macierzy globalnej
         H += H_local
-
-    # # Końcowa macierz H
-    # print(f"Końcowa macierz H:\n{H}")
 
     element.H_local = H
 
@@ -220,7 +195,7 @@ def compute_Hbc(element, alpha):
     element.H_bc = Hbc
     return Hbc
 
-# Funkcja do obliczania wektora P
+
 def compute_local_P(element, alpha, t_env):
     num_nodes = len(element.nodes)
     P = np.zeros(num_nodes)
@@ -234,68 +209,55 @@ def compute_local_P(element, alpha, t_env):
 
         for i, xi in enumerate(edge.integration_points):
             weight = edge.weights[i]
-            N = [(1 - xi) / 2, (1 + xi) / 2]  # Shape functions for the edge
+            N = [(1 - xi) / 2, (1 + xi) / 2]
 
-            # Compute the contribution to P for the edge
             P_edge = alpha * t_env * np.array(N) * weight * detJ
 
-            # Indices in the global system
             local_indices = [element.nodes.index(edge.node1), element.nodes.index(edge.node2)]
 
-            # Add contributions to the local P vector
             for a, global_a in enumerate(local_indices):
                 P[global_a] += P_edge[a]
 
     element.P = P
     return P
 
-# funkcja do obliczania macierzy pojemności cieplnej C
+
 def compute_local_C(element, density, specific_heat, integration_order):
     num_nodes = len(element.nodes)
     C = np.zeros((num_nodes, num_nodes))
 
-    # Pobranie punktów i wag Gaussa
     integration_points, weights = integration_scheme(integration_order)
 
     for i, (xi, eta) in enumerate(integration_points):
         weightX = weights[i % len(weights)]
         weightY = weights[i // len(weights)]
 
-        # Obliczenie Jakobianu
         J = compute_jacobian(element, xi, eta)
         detJ = determinant_of_jacobian(J)
 
-        # Funkcje kształtu
         N = element.shape_functions(xi, eta)
 
-        # Obliczenie lokalnej macierzy pojemności cieplnej
         C_local = density * specific_heat * np.outer(N, N) * detJ * weightX * weightY
 
-        # Dodanie macierzy lokalnej do globalnej macierzy elementu
         C += C_local
 
     element.C_local = C
     return C
 
 
-# Funkcja do agregacji
-def aggregate_to_global_H(global_H, local_H, global_indices):
+# Funkcje do agregacji
+def aggregate_to_global_matrix(global_matrix, local_matrix, global_indices):
     for local_i, global_i in enumerate(global_indices):
         for local_j, global_j in enumerate(global_indices):
-            global_H[global_i,global_j] += local_H[local_i,local_j]
+            global_matrix[global_i, global_j] += local_matrix[local_i, local_j]
 
-# Funkcja do agregacji wektora P
-def aggregate_to_global_P(global_P, local_P, global_indices):
+
+def aggregate_to_global_vector(global_vector, local_vector, global_indices):
     for local_i, global_i in enumerate(global_indices):
-        global_P[global_i] += local_P[local_i]
-
-# Funkcja do agregacji macierzy C
-def aggregate_to_global_C(global_C, local_C, global_indices):
-    for local_i, global_i in enumerate(global_indices):
-        for local_j, global_j in enumerate(global_indices):
-            global_C[global_i, global_j] += local_C[local_i, local_j]
+        global_vector[global_i] += local_vector[local_i]
 
 
+# Schematy całkowania
 def integration_scheme_2():
     points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
     weights = [1, 1]
@@ -327,7 +289,7 @@ def integration_scheme(order):
     else:
         raise ValueError(f"Nieobsługiwany schemat całkowania: {order}")
 
-# potrzebne do krawedzi
+# Schematy całkowania 1D dla krawędzi
 def integration_scheme_1D(order):
     if order == 2:
         points = [-1 / math.sqrt(3), 1 / math.sqrt(3)]
@@ -343,19 +305,7 @@ def integration_scheme_1D(order):
     return points, weights
 
 
-# Odczytywanie wspolrzednych wezlow, struktura pliku:
-# x1 y1
-# x2 y2
-def read_coordinates_from_file(file_path):
-    with open(file_path, 'r') as file:
-        coords = []
-        for line in file:
-            x, y = map(float, line.split())
-            coords.append((x, y))
-    return coords
-
 # Funkcje do odczytania wartosci z pliku o strukturze takiej jak w Test1_4_4.txt
-# Odczyt zmiennych z naglowka
 def read_header(file):
     data = {}
     for line in file:
@@ -367,6 +317,7 @@ def read_header(file):
         data[key] = float(value) if "." in value else int(value)
     return data
 
+
 def read_nodes(file):
     nodes = []
     for line in file:
@@ -375,6 +326,7 @@ def read_nodes(file):
         _, x, y = map(float, line.split(","))
         nodes.append((x, y))
     return nodes
+
 
 def read_elements(file):
     elements = []
@@ -385,6 +337,7 @@ def read_elements(file):
         elements.append(node_ids)
     return elements
 
+
 def read_bc(file):
     bc_nodes = []
     for line in file:
@@ -392,6 +345,7 @@ def read_bc(file):
             break
         bc_nodes.extend(map(int, line.split(",")))
     return bc_nodes
+
 
 # Parsowanie calego pliku
 def parse_mesh_file(file_path):
@@ -408,6 +362,7 @@ def parse_mesh_file(file_path):
         "bc_nodes": bc_nodes,
     }
 
+
 def create_nodes_and_elements(parsed_data, element_type, integration_order):
     nodes = [
         Node(x, y, i + 1 in parsed_data["bc_nodes"])
@@ -421,39 +376,39 @@ def create_nodes_and_elements(parsed_data, element_type, integration_order):
 
     return nodes, elements
 
-# sprawdzam inną wersję gaussa - wziętą z metod numerycznych
-# gdzie logika tej funkcji polegała na łączeniu ze sobą macierzy z wektorem w macierz rozszerzoną
-def gauss_rozwiazanie(H, P):
-    H = np.array(H, dtype=float)  # Upewniamy się, że H jest tablicą NumPy
-    P = np.array(P, dtype=float)  # Upewniamy się, że P jest tablicą NumPy
+
+def gauss_elimination(H, P):
+    H = np.array(H, dtype=float)
+    P = np.array(P, dtype=float)
     n = len(H)
 
-    # Łączenie macierzy H i wektora P w macierz rozszerzoną
-    macierz = np.hstack((H, P.reshape(-1, 1)))
+    matrix = np.hstack((H, P.reshape(-1, 1)))
 
     # Eliminacja Gaussa
     for k in range(n - 1):
-        if abs(macierz[k, k]) < 1e-10:
+        if abs(matrix[k, k]) < 1e-10:
             raise ValueError("Znaleziono zero na przekątnej macierzy!")
 
         for i in range(k + 1, n):
-            mnoznik = macierz[i, k] / macierz[k, k]
-            macierz[i, k:] -= mnoznik * macierz[k, k:]
+            mnoznik = matrix[i, k] / matrix[k, k]
+            matrix[i, k:] -= mnoznik * matrix[k, k:]
 
     # Postępowanie odwrotne
-    rozwiazanie = np.zeros(n)
-    rozwiazanie[-1] = macierz[-1, -1] / macierz[-1, -2]
+    temperatures = np.zeros(n)
+    temperatures[-1] = matrix[-1, -1] / matrix[-1, -2]
 
     for i in range(n - 2, -1, -1):
-        suma = np.dot(macierz[i, i + 1:n], rozwiazanie[i + 1:])
-        rozwiazanie[i] = (macierz[i, -1] - suma) / macierz[i, i]
+        sum = np.dot(matrix[i, i + 1:n], temperatures[i + 1:])
+        temperatures[i] = (matrix[i, -1] - sum) / matrix[i, i]
 
-    return rozwiazanie
+    return temperatures
+
 
 if __name__ == "__main__":
+
+    data = parse_mesh_file("Test1_4_4.txt")
     # data = parse_mesh_file("Test2_4_4_MixGrid.txt")
-    # data = parse_mesh_file("Test1_4_4.txt")
-    data = parse_mesh_file("Test3_31_31_kwadrat.txt")
+    # data = parse_mesh_file("Test3_31_31_kwadrat.txt")
 
     integration_order = 2
     nodes, elements = create_nodes_and_elements(data, element_type="4-node", integration_order=integration_order)
@@ -473,31 +428,12 @@ if __name__ == "__main__":
     global_P = np.zeros(num_global_nodes)
     global_C = np.zeros((num_global_nodes, num_global_nodes))
 
-    # print("\n=== Macierze H lokalne ===")
-    # for idx, element in enumerate(elements, start=1):
-    #     H_local = compute_local_H(element, k, integration_order)
-    #     print(f"H dla elementu - {idx}")
-    #     for row in H_local:
-    #         print(" ".join(f"{value:.5f}" for value in row))
+    # Dodane do zaprezentowania wyników zgodnie z plikiem "11. Test niestacjonarny.pdf"
+    global_H_local = np.zeros((num_global_nodes, num_global_nodes))
 
-    # printowanie do procesu stacjonarnego, zostawiam na razie dla wygody
-    # print("\n=== Macierze H całkowite (H_total) ===")
-    # for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
-    #     H_local = compute_local_H(element, k, integration_order)
-    #     Hbc = compute_Hbc(element, alpha)
-    #     H_total = H_local + Hbc
-    #
-    #     P_local = compute_local_P(element, alpha, Tot)
-    #     element.P_local = P_local
-    #
-    #     print(f"H całkowita (H_total) dla elementu - {idx}")
-    #     for row in H_total:
-    #         print(" ".join(f"{value:.5f}" for value in row))
-    #
-    #     print("Wektor P lokalny:")
-    #     print(" ".join(f"{value:.1f}" for value in P_local))
-    #
-    # print("\n=== Testowanie macierzy globalnej ===")
+
+    # #proces stacjonarny
+    # print("\n=== Wyniki dla procesu stacjonarnego ===")
     # for element, element_node_ids in zip(elements, data["element_data"]):
     #     H_local = compute_local_H(element, k, integration_order)
     #     Hbc = compute_Hbc(element, alpha)
@@ -506,49 +442,19 @@ if __name__ == "__main__":
     #     element.P_local = P_local
     #
     #     global_indices = [node_id - 1 for node_id in element_node_ids]
-    #     aggregate_to_global_P(global_P, P_local, global_indices)
-    #     aggregate_to_global_H(global_H, H_total, global_indices)
-    #
-    #
-    # # Wyświetlenie ostatecznej macierzy globalnej H
-    # print("Macierz globalna H:")
-    # for row in global_H:
-    #     print(" ".join(f"{value:.5f}" for value in row))
-    #
-    # # Wyświetlenie wektora globalnego P
-    # print("Globalny wektor P:")
-    # print(" ".join(f"{value:.1f}" for value in global_P))
+    #     aggregate_to_global_vector(global_P, P_local, global_indices)
+    #     aggregate_to_global_matrix(global_H, H_total, global_indices)
     #
     # # Rozwiązanie układu równań
-    # # temperatures = np.linalg.solve(global_H, -global_P)
-    # temperaturesSecondOne = gauss_rozwiazanie(global_H, global_P)
+    # temperaturesSecondOne = gauss_elimination(global_H, global_P)
     #
     # # Wyświetlenie wyników
     # print("\n=== Wektor temperatur w węzłach (t) w procesie stacjonarnym ===")
     # for i, temp in enumerate(temperaturesSecondOne):
     #     print(f"Węzeł {i+1}: {temp:.2f} °C")
-    #
-    #
-    #
-    # # Obliczanie macierzy C lokalnych
-    # print("\n=== Macierze C lokalne ===")
-    # for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"]), start=1):
-    #     C_local = compute_local_C(element, density, specific_heat, integration_order)
-    #     print(f"Macierz C lokalna dla elementu - {idx}")
-    #     for row in C_local:
-    #         print(" ".join(f"{value:.5f}" for value in row))
-    #
-    #     # Agregacja macierzy C do globalnej
-    #     global_indices = [node_id - 1 for node_id in element_node_ids]
-    #     aggregate_to_global_C(global_C, C_local, global_indices)
-    #
-    # # Wyświetlenie macierzy globalnej C
-    # print("\n=== Macierz globalna C ===")
-    # for row in global_C:
-    #     print(" ".join(f"{value:.5f}" for value in row))
 
-    # test niestacjonarny
-    for element, element_node_ids in zip(elements, data["element_data"]):
+    # proces niestacjonarny
+    for idx, (element, element_node_ids) in enumerate(zip(elements, data["element_data"])):
         H_local = compute_local_H(element, k, integration_order)
         C_local = compute_local_C(element, density, specific_heat, integration_order)
         Hbc = compute_Hbc(element, alpha)
@@ -557,9 +463,23 @@ if __name__ == "__main__":
         P_local = compute_local_P(element, alpha, Tot)
 
         global_indices = [node_id - 1 for node_id in element_node_ids]
-        aggregate_to_global_H(global_H, H_total, global_indices)
-        aggregate_to_global_C(global_C, C_local, global_indices)
-        aggregate_to_global_P(global_P, P_local, global_indices)
+        aggregate_to_global_matrix(global_H, H_total, global_indices)
+        aggregate_to_global_matrix(global_C, C_local, global_indices)
+        aggregate_to_global_vector(global_P, P_local, global_indices)
+
+        # Agregowanie H_local do macierzy globalnej H_local_global TYLKO DO WYNIKOW
+        aggregate_to_global_matrix(global_H_local, H_local, global_indices)
+
+    # # Wyświetlenie testowej globalnej macierzy H_local_global w iteracji 0
+    # # Wyświetlenie macierzy H local przed dodaniem do niej macierzy Hbc
+    # print("\n=== Macierz H_local po agregacji (iteracja 0) ===")
+    # for row in global_H_local:
+    #     print(" ".join(f"{value:.5f}" for value in row))
+    #
+    # # Wyświetlenie macierzy C (iteracja 0)
+    # print("\n=== Macierz globalna C (iteracja 0) ===")
+    # for row in global_C:
+    #     print(" ".join(f"{value:.5f}" for value in row))
 
     # Wektor początkowy temperatur
     t_current = np.full(num_global_nodes, initial_temp)
@@ -572,16 +492,24 @@ if __name__ == "__main__":
         # Obliczenie wektora P'
         P_prime = (global_C / simulation_step) @ t_current + global_P
 
+        # # Wyświetlenie macierzy zastępczej i wektora zastępczego w iteracji 0 i 1
+        # if step <= 2:
+        #     print(f"\n=== Iteracja {step} ===")
+        #     print("\nMacierz zastępcza H':")
+        #     for row in H_prime:
+        #         print(" ".join(f"{value:.5f}" for value in row))
+        #
+        #     print("\nWektor zastępczy P':")
+        #     print(" ".join(f"{value:.5f}" for value in P_prime))
+
         # Rozwiązanie układu równań dla t1
-        t_next = gauss_rozwiazanie(H_prime, P_prime)
+        t_next = gauss_elimination(H_prime, P_prime)
 
         t_min = np.min(t_next)
         t_max = np.max(t_next)
 
         # Wyświetlenie wyników dla danego kroku czasowego
         print(f"\n=== Krok czasowy {step}: t = {step * simulation_step}s ===")
-        # for i, temp in enumerate(t_next):
-        #     print(f"Węzeł {i + 1}: {temp:.2f} °C")
         print(f"Temperatura minimalna: {t_min:.2f} °C")
         print(f"Temperatura maksymalna: {t_max:.2f} °C")
 
